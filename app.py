@@ -2,13 +2,19 @@ import streamlit as st
 import calendar
 import fitz
 import zipfile
+from datetime import date
 from fpdf import FPDF
 from io import BytesIO
 from PIL import Image
 
 st.set_page_config(page_title="KDPEasy Calendar Creator", page_icon="📅", layout="centered")
 
-PASSWORD = "KDPCAL2026"
+# Password -> expiry date, or None for permanent access (paying customers).
+# To add a new trial password: pick a unique string and set its expiry date (issue date + trial length).
+PASSWORD_EXPIRY = {
+    "KDPCAL2026": None,
+    "KDPCALBETA2026": date(2026, 8, 26),  # 3-day trial issued 2026-08-24 (24, 25, 26)
+}
 
 MARGIN = 0.4
 TITLE_H = 0.55
@@ -71,9 +77,13 @@ def check_password() -> bool:
     st.title("📅 KDPEasy Calendar Creator")
     pw = st.text_input("Enter access password", type="password")
     if st.button("Unlock"):
-        if pw == PASSWORD:
-            st.session_state["authed"] = True
-            st.rerun()
+        if pw in PASSWORD_EXPIRY:
+            expiry = PASSWORD_EXPIRY[pw]
+            if expiry is None or date.today() <= expiry:
+                st.session_state["authed"] = True
+                st.rerun()
+            else:
+                st.error("This trial password has expired. Please reach out to get full access.")
         else:
             st.error("Incorrect password.")
     st.markdown('</div>', unsafe_allow_html=True)
