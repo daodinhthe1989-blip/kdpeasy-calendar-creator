@@ -3,6 +3,7 @@ import calendar
 import fitz
 import zipfile
 import holidays
+import re
 from datetime import date
 from fpdf import FPDF
 from io import BytesIO
@@ -108,6 +109,24 @@ def tint_toward_white(color, amount=0.85):
     )
 
 
+def parse_custom_events(text):
+    events = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        m = re.match(r"^(\d{1,2})/(\d{1,2})\s+(.+)$", line)
+        if not m:
+            continue
+        month, day, name = int(m.group(1)), int(m.group(2)), m.group(3).strip()
+        try:
+            date(2000, month, day)  # 2000 is a leap year, so Feb 29 entries validate too
+        except ValueError:
+            continue
+        events.setdefault((month, day), []).append(name)
+    return events
+
+
 def get_photo_box(page_w, page_h):
     content_w = page_w - 2 * MARGIN
     content_h_available = page_h - MARGIN - (MARGIN + TITLE_H + GAP)
@@ -145,7 +164,7 @@ def prepare_photo(uploaded_file, box_w, box_h, fill_mode):
 def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
                         include_cover, cover_title, cover_photo,
                         photos_enabled=False, month_photos=None, photo_fill=False,
-                        photo_background_layout=False, show_holidays=False):
+                        photo_background_layout=False, show_holidays=False, custom_events=None):
     pdf = FPDF(unit="in", format=(page_w, page_h))
     pdf.set_auto_page_break(False)
 
@@ -157,6 +176,7 @@ def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
         holidays.US(years=year, categories=("public", "unofficial"), observed=False)
         if show_holidays else {}
     )
+    custom_events = custom_events or {}
 
     firstweekday = 0 if start_monday else 6
     cal = calendar.Calendar(firstweekday=firstweekday)
@@ -277,14 +297,18 @@ def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
                     pdf.set_text_color(*text_color)
                     pdf.set_xy(x + 0.06, y + 0.05)
                     pdf.cell(col_w - 0.12, 0.2, str(day), align="L")
-                    if show_holidays and not bg_layout:
-                        hol_name = us_holidays.get(date(year, month, day))
-                        if hol_name:
-                            label = hol_name.split("; ")[0]
+                    if not bg_layout:
+                        labels = []
+                        if show_holidays:
+                            hol_name = us_holidays.get(date(year, month, day))
+                            if hol_name:
+                                labels.append(hol_name.split("; ")[0])
+                        labels.extend(custom_events.get((month, day), []))
+                        if labels:
                             pdf.set_text_color(*primary)
                             pdf.set_font("Helvetica", "", 6.5)
                             pdf.set_xy(x + 0.05, y + 0.22)
-                            pdf.multi_cell(col_w - 0.1, 0.09, label, align="L")
+                            pdf.multi_cell(col_w - 0.1, 0.09, "\n".join(labels), align="L")
                             pdf.set_font("Helvetica", "", 11)
                     if show_notes:
                         pdf.set_draw_color(*grid_color)
@@ -327,6 +351,19 @@ if check_password():
     page_w, page_h = PAGE_SIZES[page_size_label]
     if orientation == "Landscape":
         page_w, page_h = page_h, page_w
+
+    add_custom_events = st.checkbox("Add custom recurring dates (birthdays, anniversaries...)", value=False)
+    custom_events = {}
+    if add_custom_events:
+        events_raw = st.text_area(
+            "Enter one per line: MM/DD Name — these repeat automatically every year",
+            height=120,
+            placeholder="03/15 Mom's Birthday\n07/22 Dad's Birthday\n11/02 Sarah",
+        )
+        custom_events = parse_custom_events(events_raw)
+        if events_raw.strip():
+            loaded_count = sum(len(v) for v in custom_events.values())
+            st.caption(f"Loaded {loaded_count} recurring date(s).")
 
     cover_title = ""
     cover_photo = None
@@ -385,6 +422,7 @@ if check_password():
             include_cover, cover_title, cover_photo,
             photos_enabled=photos_enabled, month_photos=month_photos, photo_fill=photo_fill,
             photo_background_layout=bg_layout, show_holidays=show_holidays,
+            custom_events=custom_events,
         )
         pdf_bytes = pdf_buf.getvalue()
         st.success("Your calendar is ready! Here's a preview before you download:")
