@@ -10,6 +10,12 @@ st.set_page_config(page_title="KDPEasy Calendar Creator", page_icon="📅", layo
 
 PASSWORD = "KDPCAL2026"
 
+MARGIN = 0.4
+TITLE_H = 0.55
+GAP = 0.15
+PHOTO_H_FRACTION = 0.45
+PHOTO_W_FRACTION = 0.72
+
 PAGE_SIZES = {
     "Letter (8.5 x 11 in)": (8.5, 11.0),
     "Square (8.5 x 8.5 in)": (8.5, 8.5),
@@ -72,6 +78,14 @@ def check_password() -> bool:
     return False
 
 
+def get_photo_box(page_w, page_h):
+    content_w = page_w - 2 * MARGIN
+    content_h_available = page_h - MARGIN - (MARGIN + TITLE_H + GAP)
+    box_h = content_h_available * PHOTO_H_FRACTION
+    box_w = content_w * PHOTO_W_FRACTION
+    return box_w, box_h
+
+
 def prepare_photo(uploaded_file, box_w, box_h, fill_mode):
     uploaded_file.seek(0)
     img = Image.open(uploaded_file).convert("RGB")
@@ -98,11 +112,11 @@ def prepare_photo(uploaded_file, box_w, box_h, fill_mode):
         return img, draw_w, draw_h
 
 
-def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes, cover_title,
-                        photos_enabled=False, month_photos=None, photo_fill=True):
+def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
+                        include_cover, cover_title, cover_photo,
+                        photos_enabled=False, month_photos=None, photo_fill=False):
     pdf = FPDF(unit="in", format=(page_w, page_h))
     pdf.set_auto_page_break(False)
-    margin = 0.4
 
     primary = theme["primary"]
     weekend_bg = theme["weekend"]
@@ -121,48 +135,62 @@ def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes, co
 
     title_font_size = 16 if page_w < 7 else 20
 
-    if cover_title:
+    if include_cover:
         pdf.add_page()
-        pdf.set_fill_color(*primary)
-        pdf.rect(0, 0, page_w, page_h, "F")
-        pdf.set_text_color(255, 255, 255)
-        pdf.set_font("Helvetica", "B", 28 if page_w < 7 else 34)
-        pdf.set_xy(0.3, page_h / 2 - 0.5)
-        pdf.multi_cell(page_w - 0.6, 0.55, cover_title, align="C")
+        if cover_photo is not None:
+            pil_img, draw_w, draw_h = prepare_photo(cover_photo, page_w, page_h, photo_fill)
+            offset_x = (page_w - draw_w) / 2
+            offset_y = (page_h - draw_h) / 2
+            pdf.image(pil_img, x=offset_x, y=offset_y, w=draw_w, h=draw_h)
+            if cover_title:
+                band_h = 1.1 if page_h >= 8 else 0.85
+                pdf.set_fill_color(*primary)
+                pdf.rect(0, page_h - band_h, page_w, band_h, "F")
+                pdf.set_text_color(255, 255, 255)
+                pdf.set_font("Helvetica", "B", 26 if page_w < 7 else 30)
+                pdf.set_xy(0.3, page_h - band_h + (band_h - 0.5) / 2)
+                pdf.multi_cell(page_w - 0.6, 0.5, cover_title, align="C")
+        elif cover_title:
+            pdf.set_fill_color(*primary)
+            pdf.rect(0, 0, page_w, page_h, "F")
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font("Helvetica", "B", 28 if page_w < 7 else 34)
+            pdf.set_xy(0.3, page_h / 2 - 0.5)
+            pdf.multi_cell(page_w - 0.6, 0.55, cover_title, align="C")
 
     for month in range(1, 13):
         pdf.add_page()
 
         pdf.set_fill_color(*primary)
-        pdf.rect(margin, margin, page_w - 2 * margin, 0.55, "F")
+        pdf.rect(MARGIN, MARGIN, page_w - 2 * MARGIN, TITLE_H, "F")
         pdf.set_text_color(255, 255, 255)
         pdf.set_font("Helvetica", "B", title_font_size)
-        pdf.set_xy(margin, margin)
-        pdf.cell(page_w - 2 * margin, 0.55, f"{calendar.month_name[month]} {year}", align="C")
+        pdf.set_xy(MARGIN, MARGIN)
+        pdf.cell(page_w - 2 * MARGIN, TITLE_H, f"{calendar.month_name[month]} {year}", align="C")
 
-        content_w = page_w - 2 * margin
+        content_w = page_w - 2 * MARGIN
         photo_h = 0.0
         if photos_enabled:
-            content_h_available = page_h - margin - (margin + 0.55 + 0.15)
-            photo_h = content_h_available * 0.38
-            photo_y = margin + 0.55 + 0.15
+            box_w, box_h = get_photo_box(page_w, page_h)
+            photo_h = box_h
+            photo_y = MARGIN + TITLE_H + GAP
+            box_x = MARGIN + (content_w - box_w) / 2
             pdf.set_draw_color(*grid_color)
-            pdf.rect(margin, photo_y, content_w, photo_h)
+            pdf.rect(box_x, photo_y, box_w, box_h)
             photo_file = month_photos[month - 1] if month_photos else None
             if photo_file is not None:
-                pil_img, draw_w, draw_h = prepare_photo(photo_file, content_w, photo_h, photo_fill)
-                offset_x = margin + (content_w - draw_w) / 2
-                offset_y = photo_y + (photo_h - draw_h) / 2
+                pil_img, draw_w, draw_h = prepare_photo(photo_file, box_w, box_h, photo_fill)
+                offset_x = box_x + (box_w - draw_w) / 2
+                offset_y = photo_y + (box_h - draw_h) / 2
                 pdf.image(pil_img, x=offset_x, y=offset_y, w=draw_w, h=draw_h)
 
-        grid_top = margin + 0.55 + 0.15 + (photo_h + 0.15 if photos_enabled else 0)
-        grid_width = page_w - 2 * margin
-        col_w = grid_width / 7
+        grid_top = MARGIN + TITLE_H + GAP + (photo_h + GAP if photos_enabled else 0)
+        col_w = content_w / 7
         header_h = 0.3
 
         pdf.set_font("Helvetica", "B", 10)
         for i, name in enumerate(day_names):
-            x = margin + i * col_w
+            x = MARGIN + i * col_w
             fill = weekend_bg if i in weekend_idx else (255, 255, 255)
             pdf.set_fill_color(*fill)
             pdf.set_draw_color(*grid_color)
@@ -173,14 +201,14 @@ def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes, co
 
         weeks = cal.monthdayscalendar(year, month)
         n_rows = 6
-        row_h = (page_h - grid_top - header_h - margin) / n_rows
+        row_h = (page_h - grid_top - header_h - MARGIN) / n_rows
 
         pdf.set_font("Helvetica", "", 11)
         for r in range(n_rows):
             y = grid_top + header_h + r * row_h
             week = weeks[r] if r < len(weeks) else [0] * 7
             for i in range(7):
-                x = margin + i * col_w
+                x = MARGIN + i * col_w
                 fill = weekend_bg if i in weekend_idx else (255, 255, 255)
                 pdf.set_fill_color(*fill)
                 pdf.set_draw_color(*grid_color)
@@ -215,36 +243,50 @@ if check_password():
         include_cover = st.checkbox("Include a cover page", value=True)
         export_png = st.checkbox("Also export as PNG images (zipped, 300 DPI)", value=False)
 
+    page_w, page_h = PAGE_SIZES[page_size_label]
+    if orientation == "Landscape":
+        page_w, page_h = page_h, page_w
+
     cover_title = ""
+    cover_photo = None
     if include_cover:
         cover_title = st.text_input("Cover page title", value=f"{year} CALENDAR")
+        cover_photo = st.file_uploader("Cover photo (optional, fills the whole cover page)", type=["png", "jpg", "jpeg"], key="cover_photo")
 
     photos_enabled = st.checkbox("Add your own photo to each month", value=False)
     month_photos = [None] * 12
-    photo_fill = True
-    if photos_enabled:
+    photo_fill = False
+    if photos_enabled or (include_cover and cover_photo is not None):
         fit_choice = st.radio(
-            "Photo style",
-            ["Fill (crop to fill the box, no white bars)", "Fit (show the full photo, may add white bars)"],
+            "Photo style (applies to the cover photo and every month photo)",
+            ["Fit — show the full photo, may add white bars (recommended for portrait photos)",
+             "Fill — crop to fill the box, no white bars (best for landscape/square photos)"],
             index=0,
         )
         photo_fill = fit_choice.startswith("Fill")
+        st.caption("Tip: if a photo looks too cropped in the preview below, switch back to Fit.")
+
+    if include_cover and cover_photo is not None:
+        cover_prev_img, cover_draw_w, cover_draw_h = prepare_photo(cover_photo, page_w, page_h, photo_fill)
+        st.image(cover_prev_img, caption="Cover photo preview", width=220)
+
+    if photos_enabled:
+        box_w, box_h = get_photo_box(page_w, page_h)
         with st.expander("Upload a photo for each month (any month can be left empty)"):
             photo_cols = st.columns(3)
             for m in range(12):
                 with photo_cols[m % 3]:
-                    month_photos[m] = st.file_uploader(
-                        calendar.month_name[m + 1], type=["png", "jpg", "jpeg"], key=f"photo_{m}"
-                    )
+                    f = st.file_uploader(calendar.month_name[m + 1], type=["png", "jpg", "jpeg"], key=f"photo_{m}")
+                    month_photos[m] = f
+                    if f is not None:
+                        prev_img, _, _ = prepare_photo(f, box_w, box_h, photo_fill)
+                        st.image(prev_img, caption="Preview", use_container_width=True)
 
     if st.button("Generate Calendar PDF"):
-        page_w, page_h = PAGE_SIZES[page_size_label]
-        if orientation == "Landscape":
-            page_w, page_h = page_h, page_w
         theme = THEMES[theme_name]
         pdf_buf = build_calendar_pdf(
             int(year), start_monday, page_w, page_h, theme, show_notes,
-            cover_title if include_cover else "",
+            include_cover, cover_title, cover_photo,
             photos_enabled=photos_enabled, month_photos=month_photos, photo_fill=photo_fill,
         )
         pdf_bytes = pdf_buf.getvalue()
