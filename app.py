@@ -42,6 +42,9 @@ THEMES = {
 
 CUSTOM_CSS = """
 <style>
+:root {
+    color-scheme: light;
+}
 .stApp {
     background: linear-gradient(135deg, #eef2ff 0%, #ffffff 60%);
 }
