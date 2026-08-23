@@ -1,5 +1,6 @@
 import streamlit as st
 import calendar
+import fitz
 from fpdf import FPDF
 from io import BytesIO
 
@@ -178,10 +179,21 @@ if check_password():
             int(year), start_monday, page_w, page_h, theme, show_notes,
             cover_title if include_cover else ""
         )
-        st.success("Your calendar is ready!")
+        pdf_bytes = pdf_buf.getvalue()
+        st.success("Your calendar is ready! Here's a preview before you download:")
+
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        preview_count = min(2, doc.page_count)
+        captions = ["Cover page", calendar.month_name[1]] if include_cover else [calendar.month_name[1], calendar.month_name[2]]
+        preview_cols = st.columns(preview_count)
+        for i in range(preview_count):
+            pix = doc[i].get_pixmap(dpi=110)
+            preview_cols[i].image(pix.tobytes("png"), caption=captions[i], use_container_width=True)
+        doc.close()
+
         st.download_button(
             "⬇️ Download Calendar PDF",
-            data=pdf_buf,
+            data=pdf_bytes,
             file_name=f"KDPEasy_Calendar_{int(year)}.pdf",
             mime="application/pdf",
         )
