@@ -196,10 +196,9 @@ def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
 
         if bg_layout:
             panel_h = page_h - grid_top - MARGIN
-            pdf.set_alpha(0.85)
-            pdf.set_fill_color(255, 255, 255)
-            pdf.rect(MARGIN, grid_top, content_w, panel_h, "F")
-            pdf.set_alpha(1)
+            with pdf.local_context(fill_opacity=0.85):
+                pdf.set_fill_color(255, 255, 255)
+                pdf.rect(MARGIN, grid_top, content_w, panel_h, "F")
 
         col_w = content_w / 7
         header_h = 0.3
