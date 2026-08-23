@@ -99,15 +99,6 @@ def hex_to_rgb(hex_color):
     return tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
 
 
-def truncate_label(text, max_chars=18):
-    if len(text) <= max_chars:
-        return text
-    cut = text[:max_chars]
-    if " " in cut:
-        cut = cut.rsplit(" ", 1)[0]
-    return cut + "..."
-
-
 def tint_toward_white(color, amount=0.85):
     r, g, b = color
     return (
@@ -289,7 +280,7 @@ def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
                     if show_holidays and not bg_layout:
                         hol_name = us_holidays.get(date(year, month, day))
                         if hol_name:
-                            label = truncate_label(hol_name.split("; ")[0])
+                            label = hol_name.split("; ")[0]
                             pdf.set_text_color(*primary)
                             pdf.set_font("Helvetica", "", 6.5)
                             pdf.set_xy(x + 0.05, y + 0.22)
