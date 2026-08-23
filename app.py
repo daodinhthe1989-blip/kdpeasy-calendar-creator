@@ -2,6 +2,7 @@ import streamlit as st
 import calendar
 import fitz
 import zipfile
+import holidays
 from datetime import date
 from fpdf import FPDF
 from io import BytesIO
@@ -93,6 +94,20 @@ def check_password() -> bool:
     return False
 
 
+def hex_to_rgb(hex_color):
+    hex_color = hex_color.lstrip("#")
+    return tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def tint_toward_white(color, amount=0.85):
+    r, g, b = color
+    return (
+        int(r + (255 - r) * amount),
+        int(g + (255 - g) * amount),
+        int(b + (255 - b) * amount),
+    )
+
+
 def get_photo_box(page_w, page_h):
     content_w = page_w - 2 * MARGIN
     content_h_available = page_h - MARGIN - (MARGIN + TITLE_H + GAP)
@@ -130,7 +145,7 @@ def prepare_photo(uploaded_file, box_w, box_h, fill_mode):
 def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
                         include_cover, cover_title, cover_photo,
                         photos_enabled=False, month_photos=None, photo_fill=False,
-                        photo_background_layout=False):
+                        photo_background_layout=False, show_holidays=False):
     pdf = FPDF(unit="in", format=(page_w, page_h))
     pdf.set_auto_page_break(False)
 
@@ -138,6 +153,7 @@ def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
     weekend_bg = theme["weekend"]
     grid_color = theme["grid"]
     text_color = theme["text"]
+    us_holidays = holidays.US(years=year) if show_holidays else {}
 
     firstweekday = 0 if start_monday else 6
     cal = calendar.Calendar(firstweekday=firstweekday)
@@ -258,6 +274,15 @@ def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
                     pdf.set_text_color(*text_color)
                     pdf.set_xy(x + 0.06, y + 0.05)
                     pdf.cell(col_w - 0.12, 0.2, str(day), align="L")
+                    if show_holidays and not bg_layout:
+                        hol_name = us_holidays.get(date(year, month, day))
+                        if hol_name:
+                            label = hol_name if len(hol_name) <= 16 else hol_name[:13] + "..."
+                            pdf.set_text_color(*primary)
+                            pdf.set_font("Helvetica", "", 6.5)
+                            pdf.set_xy(x + 0.05, y + 0.22)
+                            pdf.multi_cell(col_w - 0.1, 0.09, label, align="L")
+                            pdf.set_font("Helvetica", "", 11)
                     if show_notes:
                         pdf.set_draw_color(*grid_color)
                         pdf.line(x + 0.1, y + row_h - 0.15, x + col_w - 0.1, y + row_h - 0.15)
@@ -278,8 +303,21 @@ if check_password():
         page_size_label = st.selectbox("Page size", list(PAGE_SIZES.keys()))
         orientation = st.radio("Orientation", ["Portrait", "Landscape"], index=0, horizontal=True)
     with col2:
-        theme_name = st.selectbox("Color theme", list(THEMES.keys()))
+        theme_mode = st.radio("Color theme", ["Preset", "Custom color"], index=0, horizontal=True)
+        if theme_mode == "Preset":
+            theme_name = st.selectbox("Choose a preset", list(THEMES.keys()))
+            theme = THEMES[theme_name]
+        else:
+            custom_hex = st.color_picker("Pick any color", "#4f46e5")
+            primary_rgb = hex_to_rgb(custom_hex)
+            theme = {
+                "primary": primary_rgb,
+                "weekend": tint_toward_white(primary_rgb, 0.85),
+                "grid": (209, 213, 219),
+                "text": (31, 41, 55),
+            }
         show_notes = st.checkbox("Add a small note-line in each day", value=False)
+        show_holidays = st.checkbox("Add major US holidays", value=False)
         include_cover = st.checkbox("Include a cover page", value=True)
         export_png = st.checkbox("Also export as PNG images (zipped, 300 DPI)", value=False)
 
@@ -339,12 +377,11 @@ if check_password():
                         st.image(prev_img, caption="Preview", use_container_width=True)
 
     if st.button("Generate Calendar PDF"):
-        theme = THEMES[theme_name]
         pdf_buf = build_calendar_pdf(
             int(year), start_monday, page_w, page_h, theme, show_notes,
             include_cover, cover_title, cover_photo,
             photos_enabled=photos_enabled, month_photos=month_photos, photo_fill=photo_fill,
-            photo_background_layout=bg_layout,
+            photo_background_layout=bg_layout, show_holidays=show_holidays,
         )
         pdf_bytes = pdf_buf.getvalue()
         st.success("Your calendar is ready! Here's a preview before you download:")
