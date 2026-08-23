@@ -1,6 +1,7 @@
 import streamlit as st
 import calendar
 import fitz
+import zipfile
 from fpdf import FPDF
 from io import BytesIO
 
@@ -167,6 +168,7 @@ if check_password():
         theme_name = st.selectbox("Color theme", list(THEMES.keys()))
         show_notes = st.checkbox("Add a small note-line in each day", value=False)
         include_cover = st.checkbox("Include a cover page", value=True)
+        export_png = st.checkbox("Also export as PNG images (zipped, 300 DPI)", value=False)
 
     cover_title = ""
     if include_cover:
@@ -189,7 +191,6 @@ if check_password():
         for i in range(preview_count):
             pix = doc[i].get_pixmap(dpi=110)
             preview_cols[i].image(pix.tobytes("png"), caption=captions[i], use_container_width=True)
-        doc.close()
 
         st.download_button(
             "⬇️ Download Calendar PDF",
@@ -197,4 +198,25 @@ if check_password():
             file_name=f"KDPEasy_Calendar_{int(year)}.pdf",
             mime="application/pdf",
         )
+
+        if export_png:
+            zip_buf = BytesIO()
+            with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                for i in range(doc.page_count):
+                    pix = doc[i].get_pixmap(dpi=300)
+                    if include_cover and i == 0:
+                        fname = "00_Cover.png"
+                    else:
+                        month_num = (i - 1 if include_cover else i) + 1
+                        fname = f"{month_num:02d}_{calendar.month_name[month_num]}.png"
+                    zf.writestr(fname, pix.tobytes("png"))
+            zip_buf.seek(0)
+            st.download_button(
+                "⬇️ Download PNG Images (ZIP, 300 DPI)",
+                data=zip_buf,
+                file_name=f"KDPEasy_Calendar_{int(year)}_PNG.zip",
+                mime="application/zip",
+            )
+
+        doc.close()
     st.markdown('</div>', unsafe_allow_html=True)
