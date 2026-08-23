@@ -4,6 +4,7 @@ import fitz
 import zipfile
 from fpdf import FPDF
 from io import BytesIO
+from PIL import Image
 
 st.set_page_config(page_title="KDPEasy Calendar Creator", page_icon="📅", layout="centered")
 
@@ -71,7 +72,34 @@ def check_password() -> bool:
     return False
 
 
-def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes, cover_title):
+def prepare_photo(uploaded_file, box_w, box_h, fill_mode):
+    uploaded_file.seek(0)
+    img = Image.open(uploaded_file).convert("RGB")
+    target_ratio = box_w / box_h
+    img_ratio = img.width / img.height
+
+    if fill_mode:
+        if img_ratio > target_ratio:
+            new_w = int(img.height * target_ratio)
+            left = (img.width - new_w) // 2
+            img = img.crop((left, 0, left + new_w, img.height))
+        else:
+            new_h = int(img.width / target_ratio)
+            top = (img.height - new_h) // 2
+            img = img.crop((0, top, img.width, top + new_h))
+        return img, box_w, box_h
+    else:
+        if img_ratio > target_ratio:
+            draw_w = box_w
+            draw_h = box_w / img_ratio
+        else:
+            draw_h = box_h
+            draw_w = box_h * img_ratio
+        return img, draw_w, draw_h
+
+
+def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes, cover_title,
+                        photos_enabled=False, month_photos=None, photo_fill=True):
     pdf = FPDF(unit="in", format=(page_w, page_h))
     pdf.set_auto_page_break(False)
     margin = 0.4
@@ -112,7 +140,22 @@ def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes, co
         pdf.set_xy(margin, margin)
         pdf.cell(page_w - 2 * margin, 0.55, f"{calendar.month_name[month]} {year}", align="C")
 
-        grid_top = margin + 0.55 + 0.15
+        content_w = page_w - 2 * margin
+        photo_h = 0.0
+        if photos_enabled:
+            content_h_available = page_h - margin - (margin + 0.55 + 0.15)
+            photo_h = content_h_available * 0.38
+            photo_y = margin + 0.55 + 0.15
+            pdf.set_draw_color(*grid_color)
+            pdf.rect(margin, photo_y, content_w, photo_h)
+            photo_file = month_photos[month - 1] if month_photos else None
+            if photo_file is not None:
+                pil_img, draw_w, draw_h = prepare_photo(photo_file, content_w, photo_h, photo_fill)
+                offset_x = margin + (content_w - draw_w) / 2
+                offset_y = photo_y + (photo_h - draw_h) / 2
+                pdf.image(pil_img, x=offset_x, y=offset_y, w=draw_w, h=draw_h)
+
+        grid_top = margin + 0.55 + 0.15 + (photo_h + 0.15 if photos_enabled else 0)
         grid_width = page_w - 2 * margin
         col_w = grid_width / 7
         header_h = 0.3
@@ -176,6 +219,24 @@ if check_password():
     if include_cover:
         cover_title = st.text_input("Cover page title", value=f"{year} CALENDAR")
 
+    photos_enabled = st.checkbox("Add your own photo to each month", value=False)
+    month_photos = [None] * 12
+    photo_fill = True
+    if photos_enabled:
+        fit_choice = st.radio(
+            "Photo style",
+            ["Fill (crop to fill the box, no white bars)", "Fit (show the full photo, may add white bars)"],
+            index=0,
+        )
+        photo_fill = fit_choice.startswith("Fill")
+        with st.expander("Upload a photo for each month (any month can be left empty)"):
+            photo_cols = st.columns(3)
+            for m in range(12):
+                with photo_cols[m % 3]:
+                    month_photos[m] = st.file_uploader(
+                        calendar.month_name[m + 1], type=["png", "jpg", "jpeg"], key=f"photo_{m}"
+                    )
+
     if st.button("Generate Calendar PDF"):
         page_w, page_h = PAGE_SIZES[page_size_label]
         if orientation == "Landscape":
@@ -183,7 +244,8 @@ if check_password():
         theme = THEMES[theme_name]
         pdf_buf = build_calendar_pdf(
             int(year), start_monday, page_w, page_h, theme, show_notes,
-            cover_title if include_cover else ""
+            cover_title if include_cover else "",
+            photos_enabled=photos_enabled, month_photos=month_photos, photo_fill=photo_fill,
         )
         pdf_bytes = pdf_buf.getvalue()
         st.success("Your calendar is ready! Here's a preview before you download:")
