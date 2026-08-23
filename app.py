@@ -11,6 +11,7 @@ PASSWORD = "KDPCAL2026"
 
 PAGE_SIZES = {
     "Letter (8.5 x 11 in)": (8.5, 11.0),
+    "Square (8.5 x 8.5 in)": (8.5, 8.5),
     "8 x 10 in": (8.0, 10.0),
     "6 x 9 in": (6.0, 9.0),
     "A4": (8.27, 11.69),
@@ -164,6 +165,7 @@ if check_password():
         year = st.number_input("Year", min_value=2020, max_value=2100, value=2027, step=1)
         start_monday = st.radio("Week starts on", ["Sunday", "Monday"], index=0) == "Monday"
         page_size_label = st.selectbox("Page size", list(PAGE_SIZES.keys()))
+        orientation = st.radio("Orientation", ["Portrait", "Landscape"], index=0, horizontal=True)
     with col2:
         theme_name = st.selectbox("Color theme", list(THEMES.keys()))
         show_notes = st.checkbox("Add a small note-line in each day", value=False)
@@ -176,6 +178,8 @@ if check_password():
 
     if st.button("Generate Calendar PDF"):
         page_w, page_h = PAGE_SIZES[page_size_label]
+        if orientation == "Landscape":
+            page_w, page_h = page_h, page_w
         theme = THEMES[theme_name]
         pdf_buf = build_calendar_pdf(
             int(year), start_monday, page_w, page_h, theme, show_notes,
