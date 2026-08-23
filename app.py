@@ -15,6 +15,8 @@ TITLE_H = 0.55
 GAP = 0.15
 PHOTO_H_FRACTION = 0.45
 PHOTO_W_FRACTION = 0.72
+BG_PANEL_OPACITY = 0.30
+BG_CHIP_OPACITY = 0.88
 
 PAGE_SIZES = {
     "Letter (8.5 x 11 in)": (8.5, 11.0),
@@ -196,7 +198,7 @@ def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
 
         if bg_layout:
             panel_h = page_h - grid_top - MARGIN
-            with pdf.local_context(fill_opacity=0.85):
+            with pdf.local_context(fill_opacity=BG_PANEL_OPACITY):
                 pdf.set_fill_color(255, 255, 255)
                 pdf.rect(MARGIN, grid_top, content_w, panel_h, "F")
 
@@ -236,6 +238,10 @@ def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
                     pdf.rect(x, y, col_w, row_h, "DF")
                 day = week[i]
                 if day != 0:
+                    if bg_layout:
+                        with pdf.local_context(fill_opacity=BG_CHIP_OPACITY):
+                            pdf.set_fill_color(255, 255, 255)
+                            pdf.rect(x + 0.04, y + 0.04, 0.36, 0.2, "F")
                     pdf.set_text_color(*text_color)
                     pdf.set_xy(x + 0.06, y + 0.05)
                     pdf.cell(col_w - 0.12, 0.2, str(day), align="L")
@@ -301,7 +307,7 @@ if check_password():
         )
         bg_layout = layout_choice.startswith("Full")
         if bg_layout:
-            st.caption("Full background always crops the photo to fill the page completely (no white bars), with a soft white panel behind the grid so the dates stay easy to read.")
+            st.caption("Full background always crops the photo to fill the page completely (no white bars). The photo stays clearly visible behind a light haze, with a small white tag behind each date number so it's always easy to read.")
 
         if bg_layout:
             preview_box_w, preview_box_h, preview_fill = page_w, page_h, True
