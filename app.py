@@ -114,7 +114,8 @@ def prepare_photo(uploaded_file, box_w, box_h, fill_mode):
 
 def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
                         include_cover, cover_title, cover_photo,
-                        photos_enabled=False, month_photos=None, photo_fill=False):
+                        photos_enabled=False, month_photos=None, photo_fill=False,
+                        photo_background_layout=False):
     pdf = FPDF(unit="in", format=(page_w, page_h))
     pdf.set_auto_page_break(False)
 
@@ -160,6 +161,13 @@ def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
 
     for month in range(1, 13):
         pdf.add_page()
+        bg_layout = photos_enabled and photo_background_layout
+
+        if bg_layout:
+            photo_file = month_photos[month - 1] if month_photos else None
+            if photo_file is not None:
+                pil_img, draw_w, draw_h = prepare_photo(photo_file, page_w, page_h, True)
+                pdf.image(pil_img, x=(page_w - draw_w) / 2, y=(page_h - draw_h) / 2, w=draw_w, h=draw_h)
 
         pdf.set_fill_color(*primary)
         pdf.rect(MARGIN, MARGIN, page_w - 2 * MARGIN, TITLE_H, "F")
@@ -170,7 +178,7 @@ def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
 
         content_w = page_w - 2 * MARGIN
         photo_h = 0.0
-        if photos_enabled:
+        if photos_enabled and not bg_layout:
             box_w, box_h = get_photo_box(page_w, page_h)
             photo_h = box_h
             photo_y = MARGIN + TITLE_H + GAP
@@ -184,17 +192,28 @@ def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
                 offset_y = photo_y + (box_h - draw_h) / 2
                 pdf.image(pil_img, x=offset_x, y=offset_y, w=draw_w, h=draw_h)
 
-        grid_top = MARGIN + TITLE_H + GAP + (photo_h + GAP if photos_enabled else 0)
+        grid_top = MARGIN + TITLE_H + GAP + (photo_h + GAP if photos_enabled and not bg_layout else 0)
+
+        if bg_layout:
+            panel_h = page_h - grid_top - MARGIN
+            pdf.set_alpha(0.85)
+            pdf.set_fill_color(255, 255, 255)
+            pdf.rect(MARGIN, grid_top, content_w, panel_h, "F")
+            pdf.set_alpha(1)
+
         col_w = content_w / 7
         header_h = 0.3
 
         pdf.set_font("Helvetica", "B", 10)
         for i, name in enumerate(day_names):
             x = MARGIN + i * col_w
-            fill = weekend_bg if i in weekend_idx else (255, 255, 255)
-            pdf.set_fill_color(*fill)
             pdf.set_draw_color(*grid_color)
-            pdf.rect(x, grid_top, col_w, header_h, "DF")
+            if bg_layout:
+                pdf.rect(x, grid_top, col_w, header_h, "D")
+            else:
+                fill = weekend_bg if i in weekend_idx else (255, 255, 255)
+                pdf.set_fill_color(*fill)
+                pdf.rect(x, grid_top, col_w, header_h, "DF")
             pdf.set_text_color(*text_color)
             pdf.set_xy(x, grid_top)
             pdf.cell(col_w, header_h, name, align="C")
@@ -209,10 +228,13 @@ def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
             week = weeks[r] if r < len(weeks) else [0] * 7
             for i in range(7):
                 x = MARGIN + i * col_w
-                fill = weekend_bg if i in weekend_idx else (255, 255, 255)
-                pdf.set_fill_color(*fill)
                 pdf.set_draw_color(*grid_color)
-                pdf.rect(x, y, col_w, row_h, "DF")
+                if bg_layout:
+                    pdf.rect(x, y, col_w, row_h, "D")
+                else:
+                    fill = weekend_bg if i in weekend_idx else (255, 255, 255)
+                    pdf.set_fill_color(*fill)
+                    pdf.rect(x, y, col_w, row_h, "DF")
                 day = week[i]
                 if day != 0:
                     pdf.set_text_color(*text_color)
@@ -270,8 +292,24 @@ if check_password():
         cover_prev_img, cover_draw_w, cover_draw_h = prepare_photo(cover_photo, page_w, page_h, photo_fill)
         st.image(cover_prev_img, caption="Cover photo preview", width=220)
 
+    bg_layout = False
     if photos_enabled:
-        box_w, box_h = get_photo_box(page_w, page_h)
+        layout_choice = st.radio(
+            "Monthly photo layout",
+            ["Box — photo sits above the calendar grid",
+             "Full background — photo fills the whole page behind the grid"],
+            index=0,
+        )
+        bg_layout = layout_choice.startswith("Full")
+        if bg_layout:
+            st.caption("Full background always crops the photo to fill the page completely (no white bars), with a soft white panel behind the grid so the dates stay easy to read.")
+
+        if bg_layout:
+            preview_box_w, preview_box_h, preview_fill = page_w, page_h, True
+        else:
+            preview_box_w, preview_box_h = get_photo_box(page_w, page_h)
+            preview_fill = photo_fill
+
         with st.expander("Upload a photo for each month (any month can be left empty)"):
             photo_cols = st.columns(3)
             for m in range(12):
@@ -279,7 +317,7 @@ if check_password():
                     f = st.file_uploader(calendar.month_name[m + 1], type=["png", "jpg", "jpeg"], key=f"photo_{m}")
                     month_photos[m] = f
                     if f is not None:
-                        prev_img, _, _ = prepare_photo(f, box_w, box_h, photo_fill)
+                        prev_img, _, _ = prepare_photo(f, preview_box_w, preview_box_h, preview_fill)
                         st.image(prev_img, caption="Preview", use_container_width=True)
 
     if st.button("Generate Calendar PDF"):
@@ -288,6 +326,7 @@ if check_password():
             int(year), start_monday, page_w, page_h, theme, show_notes,
             include_cover, cover_title, cover_photo,
             photos_enabled=photos_enabled, month_photos=month_photos, photo_fill=photo_fill,
+            photo_background_layout=bg_layout,
         )
         pdf_bytes = pdf_buf.getvalue()
         st.success("Your calendar is ready! Here's a preview before you download:")
