@@ -164,7 +164,8 @@ def prepare_photo(uploaded_file, box_w, box_h, fill_mode):
 def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
                         include_cover, cover_title, cover_photo,
                         photos_enabled=False, month_photos=None, photo_fill=False,
-                        photo_background_layout=False, show_holidays=False, custom_events=None):
+                        photo_background_layout=False, show_holidays=False, custom_events=None,
+                        font_family="Helvetica"):
     pdf = FPDF(unit="in", format=(page_w, page_h))
     pdf.set_auto_page_break(False)
 
@@ -197,19 +198,22 @@ def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
             offset_x = (page_w - draw_w) / 2
             offset_y = (page_h - draw_h) / 2
             pdf.image(pil_img, x=offset_x, y=offset_y, w=draw_w, h=draw_h)
+            with pdf.local_context(fill_opacity=0.12):
+                pdf.set_fill_color(255, 255, 255)
+                pdf.rect(0, 0, page_w, page_h, "F")
             if cover_title:
                 band_h = 1.1 if page_h >= 8 else 0.85
                 pdf.set_fill_color(*primary)
                 pdf.rect(0, page_h - band_h, page_w, band_h, "F")
                 pdf.set_text_color(255, 255, 255)
-                pdf.set_font("Helvetica", "B", 26 if page_w < 7 else 30)
+                pdf.set_font(font_family, "B", 26 if page_w < 7 else 30)
                 pdf.set_xy(0.3, page_h - band_h + (band_h - 0.5) / 2)
                 pdf.multi_cell(page_w - 0.6, 0.5, cover_title, align="C")
         elif cover_title:
             pdf.set_fill_color(*primary)
             pdf.rect(0, 0, page_w, page_h, "F")
             pdf.set_text_color(255, 255, 255)
-            pdf.set_font("Helvetica", "B", 28 if page_w < 7 else 34)
+            pdf.set_font(font_family, "B", 28 if page_w < 7 else 34)
             pdf.set_xy(0.3, page_h / 2 - 0.5)
             pdf.multi_cell(page_w - 0.6, 0.55, cover_title, align="C")
 
@@ -222,11 +226,14 @@ def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
             if photo_file is not None:
                 pil_img, draw_w, draw_h = prepare_photo(photo_file, page_w, page_h, True)
                 pdf.image(pil_img, x=(page_w - draw_w) / 2, y=(page_h - draw_h) / 2, w=draw_w, h=draw_h)
+                with pdf.local_context(fill_opacity=0.12):
+                    pdf.set_fill_color(255, 255, 255)
+                    pdf.rect(0, 0, page_w, page_h, "F")
 
         pdf.set_fill_color(*primary)
         pdf.rect(MARGIN, MARGIN, page_w - 2 * MARGIN, TITLE_H, "F")
         pdf.set_text_color(255, 255, 255)
-        pdf.set_font("Helvetica", "B", title_font_size)
+        pdf.set_font(font_family, "B", title_font_size)
         pdf.set_xy(MARGIN, MARGIN)
         pdf.cell(page_w - 2 * MARGIN, TITLE_H, f"{calendar.month_name[month]} {year}", align="C")
 
@@ -251,7 +258,7 @@ def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
         col_w = content_w / 7
         header_h = 0.3
 
-        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_font(font_family, "B", 11)
         for i, name in enumerate(day_names):
             x = MARGIN + i * col_w
             fill = weekend_bg if i in weekend_idx else (255, 255, 255)
@@ -273,7 +280,7 @@ def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
         n_rows = 6
         row_h = (page_h - grid_top - header_h - MARGIN) / n_rows
 
-        pdf.set_font("Helvetica", "", 11)
+        pdf.set_font(font_family, "", 12)
         for r in range(n_rows):
             y = grid_top + header_h + r * row_h
             week = weeks[r] if r < len(weeks) else [0] * 7
@@ -292,24 +299,36 @@ def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
                     pdf.rect(x, y, col_w, row_h, "DF")
                 day = week[i]
                 if day != 0:
+                    pdf.set_draw_color(*grid_color)
+                    pdf.rect(x + 0.03, y + 0.03, 0.34, 0.22, "D")
                     pdf.set_text_color(*text_color)
-                    pdf.set_xy(x + 0.06, y + 0.05)
-                    pdf.cell(col_w - 0.12, 0.2, str(day), align="L")
+                    pdf.set_font(font_family, "", 12)
+                    pdf.set_xy(x + 0.06, y + 0.06)
+                    pdf.cell(col_w - 0.12, 0.18, str(day), align="L")
                     labels = []
                     if show_holidays:
                         hol_name = us_holidays.get(date(year, month, day))
                         if hol_name:
                             labels.append(hol_name.split("; ")[0])
                     labels.extend(custom_events.get((month, day), []))
+                    label_bottom = y + 0.30
                     if labels:
-                        pdf.set_text_color(*primary)
-                        pdf.set_font("Helvetica", "", 6.5)
-                        pdf.set_xy(x + 0.05, y + 0.22)
-                        pdf.multi_cell(col_w - 0.1, 0.09, "\n".join(labels), align="L")
-                        pdf.set_font("Helvetica", "", 11)
+                        pdf.set_text_color(*text_color)
+                        pdf.set_font(font_family, "", 7.5)
+                        pdf.set_xy(x + 0.05, y + 0.32)
+                        pdf.multi_cell(col_w - 0.1, 0.11, "\n".join(labels), align="L")
+                        label_bottom = pdf.get_y()
+                        pdf.set_font(font_family, "", 12)
                     if show_notes:
+                        notes_top = max(label_bottom, y + 0.32) + 0.06
+                        notes_bottom = y + row_h - 0.06
+                        line_spacing = 0.17
+                        available = notes_bottom - notes_top
+                        n_lines = int(available / line_spacing)
                         pdf.set_draw_color(*grid_color)
-                        pdf.line(x + 0.1, y + row_h - 0.15, x + col_w - 0.1, y + row_h - 0.15)
+                        for li in range(n_lines):
+                            ly = notes_top + (li + 1) * line_spacing
+                            pdf.line(x + 0.08, ly, x + col_w - 0.08, ly)
 
     pdf_bytes = pdf.output()
     return BytesIO(bytes(pdf_bytes))
@@ -340,7 +359,9 @@ if check_password():
                 "grid": (209, 213, 219),
                 "text": (31, 41, 55),
             }
-        show_notes = st.checkbox("Add a small note-line in each day", value=False)
+        font_choice = st.selectbox("Font style", ["Modern (Helvetica)", "Classic (Times New Roman)", "Typewriter (Courier)"])
+        font_family = {"Modern (Helvetica)": "Helvetica", "Classic (Times New Roman)": "Times", "Typewriter (Courier)": "Courier"}[font_choice]
+        show_notes = st.checkbox("Add note-lines in each day", value=False)
         show_holidays = st.checkbox("Add major US holidays", value=False)
         include_cover = st.checkbox("Include a cover page", value=True)
         export_png = st.checkbox("Also export as PNG images (zipped, 300 DPI)", value=False)
@@ -419,7 +440,7 @@ if check_password():
             include_cover, cover_title, cover_photo,
             photos_enabled=photos_enabled, month_photos=month_photos, photo_fill=photo_fill,
             photo_background_layout=bg_layout, show_holidays=show_holidays,
-            custom_events=custom_events,
+            custom_events=custom_events, font_family=font_family,
         )
         pdf_bytes = pdf_buf.getvalue()
         st.success("Your calendar is ready! Here's a preview before you download:")
