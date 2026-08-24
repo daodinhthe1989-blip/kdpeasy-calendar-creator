@@ -23,8 +23,8 @@ TITLE_H = 0.55
 GAP = 0.15
 PHOTO_H_FRACTION = 0.45
 PHOTO_W_FRACTION = 0.72
-BG_PANEL_OPACITY = 0.30
-BG_CHIP_OPACITY = 0.88
+BG_CELL_OPACITY = 0.92
+BG_CELL_INSET = 0.035
 
 PAGE_SIZES = {
     "Letter (8.5 x 11 in)": (8.5, 11.0),
@@ -248,23 +248,21 @@ def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
 
         grid_top = MARGIN + TITLE_H + GAP + (photo_h + GAP if photos_enabled and not bg_layout else 0)
 
-        if bg_layout:
-            panel_h = page_h - grid_top - MARGIN
-            with pdf.local_context(fill_opacity=BG_PANEL_OPACITY):
-                pdf.set_fill_color(255, 255, 255)
-                pdf.rect(MARGIN, grid_top, content_w, panel_h, "F")
-
         col_w = content_w / 7
         header_h = 0.3
 
         pdf.set_font("Helvetica", "B", 10)
         for i, name in enumerate(day_names):
             x = MARGIN + i * col_w
+            fill = weekend_bg if i in weekend_idx else (255, 255, 255)
             pdf.set_draw_color(*grid_color)
             if bg_layout:
                 pdf.rect(x, grid_top, col_w, header_h, "D")
+                with pdf.local_context(fill_opacity=BG_CELL_OPACITY):
+                    pdf.set_fill_color(*fill)
+                    pdf.rect(x + BG_CELL_INSET, grid_top + BG_CELL_INSET,
+                              col_w - 2 * BG_CELL_INSET, header_h - 2 * BG_CELL_INSET, "F")
             else:
-                fill = weekend_bg if i in weekend_idx else (255, 255, 255)
                 pdf.set_fill_color(*fill)
                 pdf.rect(x, grid_top, col_w, header_h, "DF")
             pdf.set_text_color(*text_color)
@@ -281,35 +279,34 @@ def build_calendar_pdf(year, start_monday, page_w, page_h, theme, show_notes,
             week = weeks[r] if r < len(weeks) else [0] * 7
             for i in range(7):
                 x = MARGIN + i * col_w
+                fill = weekend_bg if i in weekend_idx else (255, 255, 255)
                 pdf.set_draw_color(*grid_color)
                 if bg_layout:
                     pdf.rect(x, y, col_w, row_h, "D")
+                    with pdf.local_context(fill_opacity=BG_CELL_OPACITY):
+                        pdf.set_fill_color(*fill)
+                        pdf.rect(x + BG_CELL_INSET, y + BG_CELL_INSET,
+                                  col_w - 2 * BG_CELL_INSET, row_h - 2 * BG_CELL_INSET, "F")
                 else:
-                    fill = weekend_bg if i in weekend_idx else (255, 255, 255)
                     pdf.set_fill_color(*fill)
                     pdf.rect(x, y, col_w, row_h, "DF")
                 day = week[i]
                 if day != 0:
-                    if bg_layout:
-                        with pdf.local_context(fill_opacity=BG_CHIP_OPACITY):
-                            pdf.set_fill_color(255, 255, 255)
-                            pdf.rect(x + 0.04, y + 0.04, 0.36, 0.2, "F")
                     pdf.set_text_color(*text_color)
                     pdf.set_xy(x + 0.06, y + 0.05)
                     pdf.cell(col_w - 0.12, 0.2, str(day), align="L")
-                    if not bg_layout:
-                        labels = []
-                        if show_holidays:
-                            hol_name = us_holidays.get(date(year, month, day))
-                            if hol_name:
-                                labels.append(hol_name.split("; ")[0])
-                        labels.extend(custom_events.get((month, day), []))
-                        if labels:
-                            pdf.set_text_color(*primary)
-                            pdf.set_font("Helvetica", "", 6.5)
-                            pdf.set_xy(x + 0.05, y + 0.22)
-                            pdf.multi_cell(col_w - 0.1, 0.09, "\n".join(labels), align="L")
-                            pdf.set_font("Helvetica", "", 11)
+                    labels = []
+                    if show_holidays:
+                        hol_name = us_holidays.get(date(year, month, day))
+                        if hol_name:
+                            labels.append(hol_name.split("; ")[0])
+                    labels.extend(custom_events.get((month, day), []))
+                    if labels:
+                        pdf.set_text_color(*primary)
+                        pdf.set_font("Helvetica", "", 6.5)
+                        pdf.set_xy(x + 0.05, y + 0.22)
+                        pdf.multi_cell(col_w - 0.1, 0.09, "\n".join(labels), align="L")
+                        pdf.set_font("Helvetica", "", 11)
                     if show_notes:
                         pdf.set_draw_color(*grid_color)
                         pdf.line(x + 0.1, y + row_h - 0.15, x + col_w - 0.1, y + row_h - 0.15)
@@ -398,7 +395,7 @@ if check_password():
         )
         bg_layout = layout_choice.startswith("Full")
         if bg_layout:
-            st.caption("Full background always crops the photo to fill the page completely (no white bars). The photo stays clearly visible behind a light haze, with a small white tag behind each date number so it's always easy to read.")
+            st.caption("Full background always crops the photo to fill the page completely (no white bars). Each day box stays clean and white for writing, with the photo showing through as thin lines between the boxes.")
 
         if bg_layout:
             preview_box_w, preview_box_h, preview_fill = page_w, page_h, True
